@@ -101,7 +101,8 @@ async def with_session(ctx: Context, op: Callable[[Store, Any], Any]) -> Any:
 @mcp.tool()
 async def fitness_get_day(date: str | None = None, ctx: Context = None) -> dict:
     """Nutrition summary and diary entries (with macros) for a day, plus the
-    MyFitnessPal daily note. Read-only.
+    MyFitnessPal daily note. Read-only. The goal_* values are the day's adjusted budget
+    (base goal plus calories burned in synced exercise when 'Exercise Calories' is on).
 
     date: YYYY-MM-DD (default: today).
     """

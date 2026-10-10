@@ -33,7 +33,7 @@ site.
 
 What a free MyFitnessPal account exposes in the diary (verified live): per food
 entry and per day calories, protein, carbohydrates, fat, sodium (mg) and sugar (g),
-plus the day's goals for the same six values. Other nutrients (fibre, saturated fat,
+plus the day's goals for the same six values. The goals are the day's *adjusted* budget: with the account's "Exercise Calories" switch on, calories burned in synced exercise are added to the base goal (verified: base 2000 + 505 burned = 2505 kcal), and the macro goals scale with it. Other nutrients (fibre, saturated fat,
 cholesterol, vitamins, minerals) were not in the data; they are probably premium-only.
 Water is read from MyFitnessPal's own tracker.
 
