@@ -9,8 +9,9 @@ from myfitnesspal.exceptions import MyfitnesspalLoginError
 from . import auth, config, diary
 
 RECONNECT_HINT = (
-    "MyFitnessPal session expired or not connected. "
-    "Re-run 'myfitnesspal-mcp auth' or update MFP_COOKIE, then retry."
+    "MyFitnessPal session expired or not connected. Ask the user to double-click "
+    "the 'MyFitnessPal megujitas' shortcut (or run 'myfitnesspal-mcp auth'), "
+    "then retry - no restart needed."
 )
 
 

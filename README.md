@@ -29,9 +29,23 @@ site.
 
 `fitness_get_day`, `fitness_search_food`, `fitness_get_exercise`,
 `fitness_get_exercise_entries`, `fitness_get_note`, `fitness_get_trends`
-(weight | calories_in | protein | carbs | fat), `fitness_bulk_export`.
+(weight | calories_in | protein | carbs | fat | sodium | sugar), `fitness_bulk_export`.
 
-## Connect your account (you do this, not the assistant)
+What a free MyFitnessPal account exposes in the diary (verified live): per food
+entry and per day calories, protein, carbohydrates, fat, sodium (mg) and sugar (g),
+plus the day's goals for the same six values. Other nutrients (fibre, saturated fat,
+cholesterol, vitamins, minerals) were not in the data; they are probably premium-only.
+Water is read from MyFitnessPal's own tracker.
+
+## Connect or renew your account (you do this, not the assistant)
+
+**Easiest:** double-click the *MyFitnessPal megujitas* shortcut on the Desktop
+(`renew-mfp-session.bat`). It opens MyFitnessPal, walks through copying the cookie,
+asks for it at a hidden prompt and checks the result. Nothing needs restarting
+afterwards. From the 25th day on, every tool result carries a `session_notice`
+asking the user to renew.
+
+**Manually:**
 
 1. Log in at https://www.myfitnesspal.com in your browser.
 2. DevTools (F12) -> Application -> Cookies -> copy the value of
@@ -57,5 +71,9 @@ python -m venv .venv
 .venv\Scripts\python -m pip install --no-deps -e .
 .venv\Scripts\python -m pytest
 ```
+
+Note: do not run this server's Python with `-X utf8` / `PYTHONUTF8=1` on a Windows
+path containing non-ASCII characters (e.g. `Felhasználó`): the TLS library then
+cannot open its CA bundle and every request fails.
 
 Record-keeping and trend data only - not medical or dietary advice.

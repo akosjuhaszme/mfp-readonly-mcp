@@ -2,6 +2,7 @@ import getpass
 import json
 import os
 import sys
+import time
 
 from . import config
 
@@ -109,6 +110,21 @@ def session_source() -> str | None:
     return None
 
 
+SESSION_LIFETIME_DAYS = 30
+
+
+def session_age_days() -> int | None:
+    """Age of the saved session cookie, from the cookie file's modification time
+    (the file's contents are not read). None when the cookie comes from the
+    MFP_COOKIE environment variable or nothing is saved."""
+    if config.cookie_env():
+        return None
+    path = config.cookies_path()
+    if not path.exists():
+        return None
+    return int((time.time() - path.stat().st_mtime) // 86400)
+
+
 def run_check() -> int:
     from . import mfp_client
 
@@ -119,6 +135,10 @@ def run_check() -> int:
         return 1
 
     print(f"Session:      from {source}")
+    age = session_age_days()
+    if age is not None:
+        left = max(SESSION_LIFETIME_DAYS - age, 0)
+        print(f"Age:          {age} days (lasts about {SESSION_LIFETIME_DAYS}; ~{left} left)")
     try:
         client = mfp_client.build_client(load_cookies())
     except Exception as exc:

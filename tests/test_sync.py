@@ -112,6 +112,8 @@ def test_refresh_day_populates_store(store):
             "protein": 10.0,
             "carbs": None,
             "fat": None,
+            "sodium": None,
+            "sugar": None,
         }
     ]
     assert store.note(TODAY.isoformat()) == "today felt great"

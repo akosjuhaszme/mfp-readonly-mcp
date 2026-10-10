@@ -118,3 +118,37 @@ def test_mark_synced_roundtrip(store):
     assert store.last_synced_on() is not None
 
 
+
+
+def test_old_cache_database_gets_new_columns_and_is_resynced(tmp_path):
+    import sqlite3
+
+    from myfitnesspal_mcp.store import Store
+
+    path = tmp_path / "old.db"
+    con = sqlite3.connect(path)
+    con.executescript(
+        """
+        CREATE TABLE day_nutrition (
+            day TEXT PRIMARY KEY, calories REAL, protein REAL, carbs REAL,
+            fat REAL, water_ml REAL, weight REAL, goal_calories REAL,
+            diary_synced INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE TABLE diary_entry (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, meal TEXT,
+            name TEXT, calories REAL, protein REAL, carbs REAL, fat REAL
+        );
+        INSERT INTO day_nutrition (day, calories, diary_synced)
+            VALUES ('2026-10-09', 89, 1);
+        """
+    )
+    con.commit()
+    con.close()
+
+    store = Store(path)
+    assert store.days_with_synced_diary("2026-10-01", "2026-10-31") == set()
+    store.upsert_nutrition("2026-10-09", sodium=120.0, goal_protein=150.0)
+    nutrition = store.nutrition("2026-10-09")
+    assert nutrition["sodium"] == 120.0
+    assert nutrition["goal_protein"] == 150.0
+    assert nutrition["calories"] == 89.0

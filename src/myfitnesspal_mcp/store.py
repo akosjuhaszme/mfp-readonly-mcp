@@ -16,7 +16,14 @@ CREATE TABLE IF NOT EXISTS day_nutrition (
     water_ml REAL,
     weight REAL,
     goal_calories REAL,
-    diary_synced INTEGER NOT NULL DEFAULT 0
+    diary_synced INTEGER NOT NULL DEFAULT 0,
+    sodium REAL,
+    sugar REAL,
+    goal_protein REAL,
+    goal_carbs REAL,
+    goal_fat REAL,
+    goal_sodium REAL,
+    goal_sugar REAL
 );
 CREATE TABLE IF NOT EXISTS diary_entry (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -26,7 +33,9 @@ CREATE TABLE IF NOT EXISTS diary_entry (
     calories REAL,
     protein REAL,
     carbs REAL,
-    fat REAL
+    fat REAL,
+    sodium REAL,
+    sugar REAL
 );
 CREATE INDEX IF NOT EXISTS diary_entry_day ON diary_entry(day);
 CREATE TABLE IF NOT EXISTS day_note (
@@ -47,7 +56,28 @@ NUTRITION_FIELDS = (
     "water_ml",
     "weight",
     "goal_calories",
+    "sodium",
+    "sugar",
+    "goal_protein",
+    "goal_carbs",
+    "goal_fat",
+    "goal_sodium",
+    "goal_sugar",
 )
+
+# Columns added after the first release; older cache databases get them on open.
+ADDED_COLUMNS = {
+    "day_nutrition": (
+        "sodium",
+        "sugar",
+        "goal_protein",
+        "goal_carbs",
+        "goal_fat",
+        "goal_sodium",
+        "goal_sugar",
+    ),
+    "diary_entry": ("sodium", "sugar"),
+}
 
 TREND_COLUMNS = {
     "weight": "weight",
@@ -55,6 +85,8 @@ TREND_COLUMNS = {
     "protein": "protein",
     "carbs": "carbs",
     "fat": "fat",
+    "sodium": "sodium",
+    "sugar": "sugar",
 }
 
 
@@ -99,6 +131,25 @@ class Store:
         self.conn = sqlite3.connect(str(path), check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
+        self._ensure_columns()
+
+    def _ensure_columns(self) -> None:
+        """Add columns introduced after the first release to an existing cache
+        database, and mark its days as not yet synced so they are fetched again
+        with the new fields. The cache only mirrors MyFitnessPal, so a refetch
+        loses nothing."""
+        added = False
+        for table, columns in ADDED_COLUMNS.items():
+            present = {
+                row["name"] for row in self.conn.execute(f"PRAGMA table_info({table})")
+            }
+            for column in columns:
+                if column not in present:
+                    self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} REAL")
+                    added = True
+        if added:
+            self.conn.execute("UPDATE day_nutrition SET diary_synced = 0")
+            self.conn.commit()
 
     @_serialized
     def upsert_nutrition(self, day: str, **fields) -> None:
@@ -133,8 +184,9 @@ class Store:
     @_serialized
     def nutrition(self, day: str) -> dict | None:
         row = self.conn.execute(
-            "SELECT day, calories, protein, carbs, fat, water_ml, weight, "
-            "goal_calories FROM day_nutrition WHERE day = ?",
+            "SELECT day, calories, protein, carbs, fat, sodium, sugar, water_ml, "
+            "weight, goal_calories, goal_protein, goal_carbs, goal_fat, "
+            "goal_sodium, goal_sugar FROM day_nutrition WHERE day = ?",
             (day,),
         ).fetchone()
         return _row_to_dict(row)
@@ -143,8 +195,9 @@ class Store:
     def replace_diary(self, day: str, entries: list[dict]) -> None:
         self.conn.execute("DELETE FROM diary_entry WHERE day = ?", (day,))
         self.conn.executemany(
-            "INSERT INTO diary_entry (day, meal, name, calories, protein, carbs, fat) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO diary_entry "
+            "(day, meal, name, calories, protein, carbs, fat, sodium, sugar) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
                     day,
@@ -154,6 +207,8 @@ class Store:
                     e.get("protein"),
                     e.get("carbs"),
                     e.get("fat"),
+                    e.get("sodium"),
+                    e.get("sugar"),
                 )
                 for e in entries
             ],
@@ -163,7 +218,8 @@ class Store:
     @_serialized
     def diary(self, day: str) -> list[dict]:
         rows = self.conn.execute(
-            "SELECT meal, name, calories, protein, carbs, fat FROM diary_entry "
+            "SELECT meal, name, calories, protein, carbs, fat, sodium, sugar "
+            "FROM diary_entry "
             "WHERE day = ? ORDER BY id",
             (day,),
         ).fetchall()

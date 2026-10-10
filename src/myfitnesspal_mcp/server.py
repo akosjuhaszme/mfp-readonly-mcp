@@ -5,8 +5,12 @@ from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP
 
-from . import diary, mfp_client, sync
+from . import auth, diary, mfp_client, sync
 from .store import Store, trend_column
+
+# The MyFitnessPal session cookie lasts about 30 days; warn from this age on so
+# the user can renew it before tools start failing.
+SESSION_WARN_DAYS = 25
 
 mcp = FastMCP(
     "myfitnesspal-readonly",
@@ -46,10 +50,33 @@ def parse_range(
     return start_day, end_day
 
 
+def session_notice() -> str | None:
+    age = auth.session_age_days()
+    if age is None or age < SESSION_WARN_DAYS:
+        return None
+    return (
+        f"The MyFitnessPal session is {age} days old and lasts about "
+        f"{auth.SESSION_LIFETIME_DAYS}. Ask the user to double-click the "
+        "'MyFitnessPal megujitas' shortcut (or run 'myfitnesspal-mcp auth') soon; "
+        "nothing needs restarting afterwards."
+    )
+
+
+def with_notice(result: Any) -> Any:
+    notice = session_notice()
+    if notice and isinstance(result, dict):
+        return {**result, "session_notice": notice}
+    return result
+
+
 async def run_with_retry(ctx: Context, op: Callable[[], Any]) -> Any:
     """Runs a blocking MFP operation; on an auth-shaped failure, drops the cached
     client (so a re-pasted cookie or an updated MFP_COOKIE is picked up) and
-    retries once."""
+    retries once. Adds a session_notice when the session is nearly expired."""
+    return with_notice(await _run_with_retry(ctx, op))
+
+
+async def _run_with_retry(ctx: Context, op: Callable[[], Any]) -> Any:
     try:
         return await asyncio.to_thread(op)
     except Exception as exc:

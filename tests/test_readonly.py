@@ -68,3 +68,43 @@ def test_diary_page_signed_out_is_an_auth_error(client, make_response):
     with pytest.raises(diary.DiarySignedOut) as exc_info:
         diary.diary_page(client, datetime.date(2026, 7, 8))
     assert mfp_client.is_auth_error(exc_info.value)
+
+
+def _age_cookie_file(monkeypatch, tmp_path, days):
+    import os
+    import time
+
+    from myfitnesspal_mcp import config
+
+    path = tmp_path / "cookies.json"
+    path.write_text("{}")
+    stamp = time.time() - days * 86400 - 60
+    os.utime(path, (stamp, stamp))
+    monkeypatch.setattr(config, "cookies_path", lambda: path)
+    monkeypatch.delenv("MFP_COOKIE", raising=False)
+
+
+def test_session_age_comes_from_the_file_time_not_its_contents(monkeypatch, tmp_path):
+    from myfitnesspal_mcp import auth
+
+    _age_cookie_file(monkeypatch, tmp_path, 12)
+    assert auth.session_age_days() == 12
+
+
+def test_no_session_age_when_cookie_comes_from_the_environment(monkeypatch, tmp_path):
+    from myfitnesspal_mcp import auth
+
+    _age_cookie_file(monkeypatch, tmp_path, 40)
+    monkeypatch.setenv("MFP_COOKIE", "x")
+    assert auth.session_age_days() is None
+    assert server.session_notice() is None
+
+
+def test_notice_appears_from_25_days_and_not_before(monkeypatch, tmp_path):
+    _age_cookie_file(monkeypatch, tmp_path, 24)
+    assert server.with_notice({"ok": 1}) == {"ok": 1}
+    _age_cookie_file(monkeypatch, tmp_path, 26)
+    result = server.with_notice({"ok": 1})
+    assert result["ok"] == 1
+    assert "26 days old" in result["session_notice"]
+    assert "megujitas" in result["session_notice"]
