@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import myfitnesspal_mcp  # noqa: F401  (installs the browser_cookie3 stub first)
 import pytest
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -37,9 +38,20 @@ class FakeSession:
         self.calls.append(("GET", url, kwargs))
         return self._match("GET", url)
 
+    def _refuse_write(self, method, url):
+        raise AssertionError(f"read-only build must never {method} ({url})")
+
     def post(self, url, **kwargs):
-        self.calls.append(("POST", url, kwargs))
-        return self._match("POST", url)
+        self._refuse_write("POST", url)
+
+    def put(self, url, **kwargs):
+        self._refuse_write("PUT", url)
+
+    def delete(self, url, **kwargs):
+        self._refuse_write("DELETE", url)
+
+    def patch(self, url, **kwargs):
+        self._refuse_write("PATCH", url)
 
 
 class FakeClient:
@@ -84,7 +96,6 @@ def exercise_html():
 def exercise_client(exercise_html):
     fake = FakeClient()
     fake.session.route("GET", "exercise/diary/tester", FakeResponse(text=exercise_html))
-    fake.session.route("POST", "exercise/remove", FakeResponse(status_code=200))
     return fake
 
 
@@ -98,12 +109,9 @@ def client(search_html, diary_html):
     fake = FakeClient()
     fake.session.route("GET", "food/search", FakeResponse(text=search_html))
     fake.session.route("GET", "food/diary?date=", FakeResponse(text=diary_html))
-    fake.session.route("POST", "food/add", FakeResponse(status_code=204))
-    fake.session.route("POST", "food/remove", FakeResponse(status_code=200))
     fake.session.route(
         "GET", "food/note", FakeResponse(json_data={"item": {"body": "hello world"}})
     )
-    fake.session.route("POST", "food/note", FakeResponse(status_code=200))
     return fake
 
 

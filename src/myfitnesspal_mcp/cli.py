@@ -6,7 +6,7 @@ import sys
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="myfitnesspal-mcp",
-        description="MCP server for MyFitnessPal (stdio by default).",
+        description="Read-only MCP server for MyFitnessPal (stdio only).",
     )
     parser.add_argument(
         "command",
@@ -19,17 +19,6 @@ def main() -> None:
         "--check",
         action="store_true",
         help="with auth: report whether the saved session works, without prompting",
-    )
-    parser.add_argument(
-        "--http",
-        action="store_true",
-        help="serve over streamable HTTP instead of stdio",
-    )
-    parser.add_argument(
-        "--host", default="127.0.0.1", help="HTTP bind host (default 127.0.0.1)"
-    )
-    parser.add_argument(
-        "--port", type=int, default=8484, help="HTTP port (default 8484)"
     )
     args = parser.parse_args()
 
@@ -50,12 +39,7 @@ def main() -> None:
 
     from .server import mcp
 
-    if args.http:
-        mcp.settings.host = args.host
-        mcp.settings.port = args.port
-        mcp.run(transport="streamable-http")
-    else:
-        mcp.run()
+    mcp.run()
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 [project]
-name = "mfp-mcp"
-version = "0.4.1"
-description = "MCP server for MyFitnessPal: log, search, and analyze your food diary from any MCP client"
+name = "mfp-readonly-mcp"
+version = "0.4.1+readonly"
+description = "Read-only fork of mfp-mcp 0.4.1 (upstream commit 1bb92c6): read your MyFitnessPal food diary from an MCP client - no logging, editing or deleting"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -19,9 +19,6 @@ dependencies = [
     "lxml>=5,<7",
     "platformdirs>=4",
 ]
-
-[project.optional-dependencies]
-autorefresh = ["playwright>=1.40"]
 
 [project.urls]
 Repository = "https://github.com/Mason-Levyy/myfitnesspal-mcp"

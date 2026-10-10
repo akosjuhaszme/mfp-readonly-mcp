@@ -5,11 +5,17 @@ from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP
 
-from . import diary, food_logging, mfp_client, refresh, sync
-from .food_ranking import MacroTargets
+from . import diary, mfp_client, sync
 from .store import Store, trend_column
 
-mcp = FastMCP("myfitnesspal")
+mcp = FastMCP(
+    "myfitnesspal-readonly",
+    instructions=(
+        "Read-only access to the user's MyFitnessPal food diary. Nothing here can "
+        "log, change or delete diary data. The numbers are the user's own "
+        "record-keeping for trend analysis, not medical or dietary advice."
+    ),
+)
 
 _store: Store | None = None
 
@@ -40,56 +46,35 @@ def parse_range(
     return start_day, end_day
 
 
-async def run_with_refresh(ctx: Context, op: Callable[[], Any]) -> Any:
-    """Runs a blocking MFP operation; on an auth-shaped failure, notifies the
-    client, refreshes the session (headless browser profile when available,
-    otherwise re-reads MFP_COOKIE / cookies.json), and retries once."""
+async def run_with_retry(ctx: Context, op: Callable[[], Any]) -> Any:
+    """Runs a blocking MFP operation; on an auth-shaped failure, drops the cached
+    client (so a re-pasted cookie or an updated MFP_COOKIE is picked up) and
+    retries once."""
     try:
         return await asyncio.to_thread(op)
     except Exception as exc:
         if not mfp_client.is_auth_error(exc):
             raise
-        await ctx.info(
-            "MyFitnessPal rejected the session — refreshing credentials and retrying."
-        )
+        await ctx.info("MyFitnessPal rejected the session - retrying once.")
+        mfp_client.reset()
         try:
-            await asyncio.to_thread(refresh.refresh_session)
-            result = await asyncio.to_thread(op)
+            return await asyncio.to_thread(op)
         except Exception as retry_exc:
-            await ctx.info("Session refresh failed.")
             raise RuntimeError(
-                f"{mfp_client.RECONNECT_HINT} (retry after refresh failed: {retry_exc})"
+                f"{mfp_client.RECONNECT_HINT} (retry failed: {retry_exc})"
             ) from retry_exc
-        await ctx.info("Session refreshed; the retried call succeeded.")
-        return result
 
 
 async def with_session(ctx: Context, op: Callable[[Store, Any], Any]) -> Any:
     """Runs `op` against the store and a live MFP client, re-resolving both on
-    the retry so a refreshed session is picked up."""
-    return await run_with_refresh(ctx, lambda: op(get_store(), mfp_client.get_client()))
-
-
-async def refresh_after_write(ctx: Context, day: datetime.date) -> dict:
-    def refresh_op(store, client):
-        sync.refresh_day(store, client, day)
-
-    try:
-        await with_session(ctx, refresh_op)
-    except Exception as exc:
-        return {
-            "refresh_warning": (
-                f"the diary change was saved, but refreshing the local copy of "
-                f"{day.isoformat()} failed ({exc}); don't repeat the change"
-            )
-        }
-    return {}
+    the retry."""
+    return await run_with_retry(ctx, lambda: op(get_store(), mfp_client.get_client()))
 
 
 @mcp.tool()
 async def fitness_get_day(date: str | None = None, ctx: Context = None) -> dict:
-    """Nutrition summary, diary entries, the MyFitnessPal daily note, and the
-    local feel note for a day.
+    """Nutrition summary and diary entries (with macros) for a day, plus the
+    MyFitnessPal daily note. Read-only.
 
     date: YYYY-MM-DD (default: today).
     """
@@ -107,10 +92,9 @@ async def fitness_get_day(date: str | None = None, ctx: Context = None) -> dict:
 async def fitness_search_food(
     query: str, limit: int = 5, with_macros: bool = True, ctx: Context = None
 ) -> dict:
-    """Search MyFitnessPal's food database and return candidate matches.
-
-    Each candidate has name, brand, calories, macros, serving, and the
-    food_id + weight_id to pass to fitness_log_food to log exactly that item.
+    """Search MyFitnessPal's food database and return candidate matches with
+    name, brand, calories, macros and serving. Read-only lookup - nothing is
+    logged.
     """
 
     def op(store, client):
@@ -118,284 +102,6 @@ async def fitness_search_food(
             "query": query,
             "results": diary.search_food(client, query, limit, with_macros),
         }
-
-    return await with_session(ctx, op)
-
-
-@mcp.tool()
-async def fitness_draft_food(
-    query: str,
-    quantity: float = 1.0,
-    meal: str = "breakfast",
-    date: str | None = None,
-    min_calories: float | None = None,
-    max_calories: float | None = None,
-    min_protein: float | None = None,
-    max_protein: float | None = None,
-    min_carbs: float | None = None,
-    max_carbs: float | None = None,
-    min_fat: float | None = None,
-    max_fat: float | None = None,
-    limit: int = 10,
-    ctx: Context = None,
-) -> dict:
-    """Draft a food entry: numbered options to choose from before logging.
-
-    Each option lists every serving size with its calories/protein/carbs/fat
-    for the whole entry (serving × quantity) and a suggested_serving. The
-    min_/max_ targets (grams; calories in kcal) also apply to the whole
-    entry: options that fit come first, near misses follow, flagged
-    fits_targets=false. A food you've confirmed before for this query is
-    pinned to the top. The order is fixed once drafted.
-
-    Log a choice with fitness_log_food(draft_id=..., option=N, serving=M);
-    call this again with different targets to refine. Drafts last 24 hours.
-    date: YYYY-MM-DD (default: today).
-    """
-    day = parse_day(date)
-    targets = MacroTargets(
-        min_calories=min_calories,
-        max_calories=max_calories,
-        min_protein=min_protein,
-        max_protein=max_protein,
-        min_carbs=min_carbs,
-        max_carbs=max_carbs,
-        min_fat=min_fat,
-        max_fat=max_fat,
-    )
-
-    def op(store, client):
-        return food_logging.draft_food(
-            client, store, query, day, meal, quantity, targets, limit
-        )
-
-    return await with_session(ctx, op)
-
-
-@mcp.tool()
-async def fitness_log_food(
-    query: str | None = None,
-    meal: str | None = None,
-    quantity: float | None = None,
-    date: str | None = None,
-    draft_id: str | None = None,
-    option: int | None = None,
-    serving: int | None = None,
-    pin: bool = True,
-    food_id: str | None = None,
-    weight_id: str | None = None,
-    ctx: Context = None,
-) -> dict:
-    """Log a food to the real MyFitnessPal diary.
-
-    Preferred: pick from a fitness_draft_food draft with draft_id + option
-    (+ serving, default the option's suggested_serving). meal, quantity, and
-    date default to the draft's. pin=True remembers the choice so logging
-    the same query later reuses this food and serving.
-
-    With only `query`: logs a pinned food, or the single exact-name match;
-    otherwise nothing is logged and a draft is returned (needs_choice=true)
-    to pick from. With food_id + weight_id (from fitness_search_food): logs
-    exactly that item, `query` being its display name.
-
-    meal: breakfast|lunch|dinner|snacks (default breakfast) or any meal name
-    on the account. quantity: number of servings (default 1).
-    date: YYYY-MM-DD (default today).
-    """
-    explicit_day = parse_day(date) if date else None
-
-    def op(store, client):
-        if draft_id is not None:
-            if option is None:
-                raise ValueError("option is required with draft_id")
-            result = food_logging.log_from_draft(
-                client,
-                store,
-                draft_id,
-                option,
-                serving=serving,
-                quantity=quantity,
-                meal=meal,
-                day=explicit_day,
-                pin=pin,
-            )
-        elif food_id is not None and weight_id is not None:
-            food = {
-                "food_id": food_id,
-                "weight_id": weight_id,
-                "name": query or food_id,
-            }
-            logged = food_logging.log_exact(
-                client,
-                food,
-                explicit_day or parse_day(None),
-                meal or "breakfast",
-                1.0 if quantity is None else quantity,
-            )
-            result = {**logged, "source": "ids"}
-        elif query:
-            result = food_logging.log_by_query(
-                client,
-                store,
-                query,
-                explicit_day or parse_day(None),
-                meal or "breakfast",
-                1.0 if quantity is None else quantity,
-            )
-        else:
-            raise ValueError("pass draft_id + option, food_id + weight_id, or query")
-        return result
-
-    result = await with_session(ctx, op)
-    if not result.get("logged"):
-        return {"ok": True, **result}
-    refresh_warning = await refresh_after_write(
-        ctx, datetime.date.fromisoformat(result["date"])
-    )
-    return {
-        "ok": True,
-        **result,
-        **refresh_warning,
-        "day": get_store().day_record(result["date"]),
-    }
-
-
-@mcp.tool()
-def fitness_list_food_pins() -> dict:
-    """List remembered food choices (query → food and serving) that
-    fitness_log_food reuses. Stored locally only."""
-    return {"pins": get_store().pins()}
-
-
-@mcp.tool()
-def fitness_clear_food_pin(query: str | None = None, clear_all: bool = False) -> dict:
-    """Forget a remembered food choice for `query`, or every choice with
-    clear_all=True, so the next log of that query drafts options again."""
-    store = get_store()
-    if clear_all:
-        return {"cleared": store.clear_pins()}
-    if not query:
-        raise ValueError("pass query, or clear_all=True")
-    return {"cleared": int(store.clear_pin(query))}
-
-
-@mcp.tool()
-async def fitness_delete_food(
-    query: str, meal: str | None = None, date: str | None = None, ctx: Context = None
-) -> dict:
-    """Remove a food from the MyFitnessPal diary by name match.
-
-    query: text matched against logged entry names (e.g. "banana"). If this
-    matches nothing, the error lists what's actually logged that day/meal — use
-    that to retry with a better query. If it matches more than one entry (and
-    none is an exact name match), the error lists the candidates; narrow `query`
-    to pick one.
-    meal: optional breakfast|lunch|dinner|snacks or any meal name on the
-    account, to disambiguate duplicates. date: YYYY-MM-DD (default: today).
-    """
-    day = parse_day(date)
-
-    def op(store, client):
-        return diary.delete_food(client, day, query, meal)
-
-    result = await with_session(ctx, op)
-    return {"ok": True, **result, **await refresh_after_write(ctx, day)}
-
-
-@mcp.tool()
-async def fitness_modify_food(
-    query: str,
-    new_query: str | None = None,
-    meal: str = "breakfast",
-    quantity: float | None = None,
-    date: str | None = None,
-    draft_id: str | None = None,
-    option: int | None = None,
-    serving: int | None = None,
-    ctx: Context = None,
-) -> dict:
-    """Replace a MyFitnessPal diary entry: deletes the match, then adds a food.
-
-    query: the existing entry to replace (name match) within `meal`. If this
-    matches nothing, the error lists what's actually logged that day/meal — use
-    that to retry with a better query. If it matches more than one entry (and
-    none is an exact name match), the error lists the candidates; narrow `query`
-    to pick one.
-    new_query: the food to add instead; omit to re-add `query` (e.g. to change
-    quantity). The replacement is chosen like fitness_log_food's: a pinned
-    food or a single exact-name match is used directly; otherwise nothing is
-    changed and a draft comes back (needs_choice=true) — call again with the
-    same query plus draft_id + option (and optionally serving).
-    meal: breakfast|lunch|dinner|snacks or any meal name on the account,
-    used for both the delete and the add. quantity: servings (default 1, or
-    the draft's). date: YYYY-MM-DD (default: today).
-    """
-    day = parse_day(date)
-
-    def op(store, client):
-        return food_logging.modify_food(
-            client,
-            store,
-            day,
-            meal,
-            query,
-            new_query,
-            quantity,
-            draft_id=draft_id,
-            option=option,
-            serving=serving,
-        )
-
-    result = await with_session(ctx, op)
-    if result.get("needs_choice"):
-        return {"ok": True, **result}
-    return {"ok": True, **result, **await refresh_after_write(ctx, day)}
-
-
-@mcp.tool()
-async def fitness_log_weight(
-    weight: float, date: str | None = None, ctx: Context = None
-) -> dict:
-    """Log a weight measurement to MyFitnessPal.
-
-    weight: in your MyFitnessPal account's display unit (kg or lbs).
-    Logging twice for the same date updates that day's measurement.
-    date: YYYY-MM-DD (default: today).
-    """
-    day = parse_day(date)
-
-    def op(store, client):
-        result = diary.set_weight(client, day, weight)
-        store.upsert_nutrition(day.isoformat(), weight=result["weight"])
-        return {"ok": True, **result}
-
-    return await with_session(ctx, op)
-
-
-@mcp.tool()
-async def fitness_log_water(
-    amount: float,
-    unit: str = "cup",
-    replace: bool = False,
-    date: str | None = None,
-    ctx: Context = None,
-) -> dict:
-    """Log water to the real MyFitnessPal water tracker.
-
-    amount: quantity to add to the day's total. unit: cup | fl_oz | ml | l
-    (common spellings like "cups", "oz", "fl oz", "milliliters", "litres" are
-    accepted). replace: set the day's total to `amount` instead of adding —
-    use it to correct a mislogged total (amount=0 clears the day).
-    Returns previous_ml; to undo a mistake, call again with
-    amount=previous_ml, unit="ml", replace=True.
-    date: YYYY-MM-DD (default: today).
-    """
-    day = parse_day(date)
-
-    def op(store, client):
-        result = diary.log_water(client, day, amount, unit, replace=replace)
-        store.upsert_nutrition(day.isoformat(), water_ml=result["water_ml"])
-        return {"ok": True, **result}
 
     return await with_session(ctx, op)
 
@@ -421,8 +127,7 @@ async def fitness_get_exercise_entries(
     """List a day's cardio and strength exercise-diary entries.
 
     Each entry has its section, name, and that section's columns (cardio:
-    minutes, calories_burned; strength: sets, reps_set, weight_set). entry_id
-    is informational only — fitness_delete_exercise deletes by name match.
+    minutes, calories_burned; strength: sets, reps_set, weight_set).
     date: YYYY-MM-DD (default: today).
     """
     day = parse_day(date)
@@ -435,36 +140,9 @@ async def fitness_get_exercise_entries(
 
 
 @mcp.tool()
-async def fitness_delete_exercise(
-    query: str,
-    date: str | None = None,
-    all_matches: bool = False,
-    ctx: Context = None,
-) -> dict:
-    """Remove exercise-diary entries by name match (case-insensitive).
-
-    query: text matched against logged exercise names. By default deletes
-    exactly one entry, like fitness_delete_food: an exact name match wins;
-    otherwise several matches raise an error listing the candidates, and no
-    match raises an error listing what's actually logged.
-    all_matches: delete every entry whose name contains `query` — for
-    cleaning up syncs that log one workout as several same-named rows
-    (e.g. Garmin's "Aerobics, general"). Check fitness_get_exercise_entries
-    first; a short query can match many entries.
-    date: YYYY-MM-DD (default: today).
-    """
-    day = parse_day(date)
-
-    def op(store, client):
-        return diary.delete_exercise(client, day, query, all_matches=all_matches)
-
-    return await with_session(ctx, op)
-
-
-@mcp.tool()
 async def fitness_get_note(date: str | None = None, ctx: Context = None) -> dict:
     """Read the MyFitnessPal daily diary note (the free-text 'Notes' box at the
-    bottom of the day) straight from your account.
+    bottom of the day) straight from the account. Read-only.
 
     date: YYYY-MM-DD (default: today).
     """
@@ -476,40 +154,6 @@ async def fitness_get_note(date: str | None = None, ctx: Context = None) -> dict
         return {"day": day.isoformat(), "note": body}
 
     return await with_session(ctx, op)
-
-
-@mcp.tool()
-async def fitness_log_note(
-    text: str, date: str | None = None, append: bool = False, ctx: Context = None
-) -> dict:
-    """Write the MyFitnessPal daily diary note (the free-text 'Notes' box at the
-    bottom of the day). This is your real MFP note, synced to your account —
-    distinct from the local-only fitness_log_feel.
-
-    text: the note body. append: add to the existing note on a new line instead
-    of replacing it. date: YYYY-MM-DD (default: today).
-    """
-    day = parse_day(date)
-
-    def op(store, client):
-        result = diary.push_note(client, day, text, append=append)
-        store.set_note(day.isoformat(), result["note"])
-        return {"ok": True, **result}
-
-    return await with_session(ctx, op)
-
-
-@mcp.tool()
-def fitness_log_feel(
-    note: str | None = None, rating: int | None = None, date: str | None = None
-) -> dict:
-    """Save a 'how I feel today' note. Stored locally only — never sent to
-    MyFitnessPal.
-
-    rating: optional 1-5. date: YYYY-MM-DD (default: today).
-    """
-    day = parse_day(date)
-    return get_store().set_feel(day.isoformat(), note, rating)
 
 
 @mcp.tool()
@@ -543,8 +187,8 @@ async def fitness_bulk_export(
     ctx: Context = None,
 ) -> dict:
     """Export a whole date range at once for analysis: per-day nutrition
-    totals, food entries with macros, the MyFitnessPal daily note, and local
-    feel notes. Read-only.
+    totals, food entries with macros, and the MyFitnessPal daily note.
+    Read-only.
 
     start/end: YYYY-MM-DD (default: last 30 days ending today).
     sync_first: gap-fill from MyFitnessPal before exporting. Off by default so
@@ -565,4 +209,4 @@ async def fitness_bulk_export(
             "days": days,
         }
 
-    return await run_with_refresh(ctx, op)
+    return await run_with_retry(ctx, op)

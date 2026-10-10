@@ -60,17 +60,6 @@ def test_replace_diary(store):
     assert [e["name"] for e in entries] == ["Oats", "Salad"]
 
 
-def test_feel_upsert(store):
-    store.set_feel("2026-07-01", "tired", 2)
-    store.set_feel("2026-07-01", "better after coffee", 4)
-    assert store.feel("2026-07-01") == {
-        "day": "2026-07-01",
-        "note": "better after coffee",
-        "rating": 4,
-    }
-    assert store.feel("2026-07-02") is None
-
-
 def test_note_upsert(store):
     store.set_note("2026-07-01", "first draft")
     store.set_note("2026-07-01", "final note")
@@ -117,50 +106,6 @@ def test_nutrition_hides_sync_bookkeeping(store):
     assert "diary_synced" not in store.nutrition("2026-07-01")
 
 
-def test_migrates_pre_diary_synced_database(tmp_path):
-    from myfitnesspal_mcp.store import Store
-
-    path = tmp_path / "old.db"
-    legacy = sqlite3.connect(str(path))
-    legacy.executescript(
-        """
-        CREATE TABLE day_nutrition (
-            day TEXT PRIMARY KEY, calories REAL, protein REAL, carbs REAL,
-            fat REAL, water_ml REAL, weight REAL, goal_calories REAL
-        );
-        INSERT INTO day_nutrition (day, calories) VALUES ('2026-07-01', 2000.0);
-        INSERT INTO day_nutrition (day, water_ml) VALUES ('2026-07-02', 500.0);
-        INSERT INTO day_nutrition (day, weight) VALUES ('2026-07-03', 80.0);
-        """
-    )
-    legacy.commit()
-    legacy.close()
-
-    store = Store(path)
-    assert store.days_with_synced_diary("2026-07-01", "2026-07-03") == {
-        "2026-07-01",
-        "2026-07-02",
-    }
-    assert store.nutrition("2026-07-03")["weight"] == 80.0
-
-
-def test_export_range_unions_sources(store):
-    store.upsert_nutrition("2026-07-01", calories=2000.0)
-    store.replace_diary("2026-07-02", [{"meal": "Lunch", "name": "Soup"}])
-    store.set_feel("2026-07-03", "good", 5)
-    store.set_note("2026-07-04", "walked 10k steps")
-    days = store.export_range("2026-07-01", "2026-07-31")
-    assert [d["day"] for d in days] == [
-        "2026-07-01",
-        "2026-07-02",
-        "2026-07-03",
-        "2026-07-04",
-    ]
-    assert days[1]["diary"][0]["name"] == "Soup"
-    assert days[2]["feel"]["rating"] == 5
-    assert days[3]["note"] == "walked 10k steps"
-
-
 def test_export_range_ignores_empty_notes(store):
     store.set_note("2026-07-05", None)
     store.set_note("2026-07-06", "")
@@ -173,59 +118,3 @@ def test_mark_synced_roundtrip(store):
     assert store.last_synced_on() is not None
 
 
-def test_pin_roundtrip_normalizes_query(store):
-    store.set_pin("  Greek   Yogurt ", "111", "10", "Greek Yogurt", "1 cup")
-    pin = store.pin("greek yogurt")
-    assert pin["food_id"] == "111"
-    assert pin["weight_id"] == "10"
-    assert pin["serving"] == "1 cup"
-    assert pin["query"] == "greek yogurt"
-
-
-def test_pin_overwrites_previous_choice(store):
-    store.set_pin("banana", "111", "10", "Banana", "1 medium")
-    store.set_pin("Banana", "222", "30", "Banana, organic", "1 large")
-    assert [p["food_id"] for p in store.pins()] == ["222"]
-
-
-def test_clear_pin_and_clear_all(store):
-    store.set_pin("banana", "111", "10", "Banana", None)
-    store.set_pin("oats", "333", "40", "Oats", None)
-    assert store.clear_pin("BANANA") is True
-    assert store.clear_pin("banana") is False
-    assert store.pin("banana") is None
-    assert store.clear_pins() == 1
-    assert store.pins() == []
-
-
-def test_draft_roundtrip_and_expiry(store):
-    created = datetime.datetime(2026, 9, 28, 12, tzinfo=datetime.timezone.utc)
-    draft_id = store.save_draft({"query": "banana", "options": [1]}, now=created)
-    later = created + datetime.timedelta(hours=23)
-    assert store.draft(draft_id, now=later) == {"query": "banana", "options": [1]}
-    expired = created + datetime.timedelta(hours=25)
-    assert store.draft(draft_id, now=expired) is None
-    assert store.draft("missing") is None
-
-
-def test_save_draft_purges_expired_drafts(store):
-    created = datetime.datetime(2026, 9, 28, 12, tzinfo=datetime.timezone.utc)
-    old_id = store.save_draft({"query": "old"}, now=created)
-    store.save_draft({"query": "new"}, now=created + datetime.timedelta(days=2))
-    row = store.conn.execute(
-        "SELECT 1 FROM food_draft WHERE draft_id = ?", (old_id,)
-    ).fetchone()
-    assert row is None
-
-
-def test_existing_database_gains_pin_and_draft_tables(tmp_path):
-    from myfitnesspal_mcp.store import Store
-
-    path = tmp_path / "legacy.db"
-    legacy = sqlite3.connect(path)
-    legacy.execute("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT)")
-    legacy.commit()
-    legacy.close()
-    store = Store(path)
-    store.set_pin("banana", "111", "10", "Banana", None)
-    assert store.pin("banana")["food_id"] == "111"

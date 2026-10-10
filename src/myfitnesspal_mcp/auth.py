@@ -1,5 +1,6 @@
 import getpass
 import json
+import os
 import sys
 
 from . import config
@@ -59,14 +60,18 @@ def save_cookies(cookies: dict[str, str], username: str | None = None) -> None:
     if username:
         saved["username"] = username
     path = config.cookies_path()
-    path.write_text(json.dumps(saved, indent=2))
+    # Create the file owner-only from the start (no window where it is world
+    # readable). On Windows the mode is ignored and the profile ACL applies.
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as handle:
+        handle.write(json.dumps(saved, indent=2))
     path.chmod(0o600)
 
 
 def read_cookie_paste() -> str:
     if sys.stdin.isatty():
         return getpass.getpass("Paste cookie (input hidden): ")
-    print("(no terminal detected — reading the cookie from stdin)", file=sys.stderr)
+    print("(no terminal detected - reading the cookie from stdin)", file=sys.stderr)
     return sys.stdin.readline()
 
 
@@ -104,24 +109,12 @@ def session_source() -> str | None:
     return None
 
 
-def auto_refresh_status() -> tuple[bool, str]:
-    from . import refresh
-
-    if not refresh.available():
-        return False, "off (install the [autorefresh] extra, then run auth again)"
-    if not refresh.profile_seeded():
-        return False, "installed, but no browser profile yet (run auth again)"
-    return True, f"ready (profile at {refresh.profile_dir()})"
-
-
 def run_check() -> int:
     from . import mfp_client
 
     source = session_source()
-    auto_refresh_ready, auto_refresh_summary = auto_refresh_status()
     if source is None:
         print("Session:      none saved")
-        print(f"Auto-refresh: {auto_refresh_summary}")
         print("Fix: run 'myfitnesspal-mcp auth' to connect your account.")
         return 1
 
@@ -130,23 +123,15 @@ def run_check() -> int:
         client = mfp_client.build_client(load_cookies())
     except Exception as exc:
         print(f"Status:       rejected ({exc})")
-        print(f"Auto-refresh: {auto_refresh_summary}")
-        if auto_refresh_ready:
-            print(
-                "Fix: the server will try a headless-browser refresh on the next "
-                "tool call; if that fails, run 'myfitnesspal-mcp auth'."
-            )
-        else:
-            print("Fix: run 'myfitnesspal-mcp auth' with a fresh cookie.")
+        print("Fix: run 'myfitnesspal-mcp auth' with a fresh cookie.")
         return 1
 
     print(f"Status:       valid, connected as {client.effective_username}")
-    print(f"Auto-refresh: {auto_refresh_summary}")
     return 0
 
 
 def run_auth_flow() -> int:
-    from . import mfp_client, refresh
+    from . import mfp_client
 
     print(INSTRUCTIONS, flush=True)
     try:
@@ -179,23 +164,5 @@ def run_auth_flow() -> int:
     print(
         f"Connected as {client.effective_username}. Cookies saved to {config.cookies_path()}"
     )
-
-    if refresh.available():
-        print("Seeding the browser profile for automatic session refresh...")
-        try:
-            refresh.seed_profile(cookies)
-            print(f"Auto-refresh ready (profile at {refresh.profile_dir()}).")
-        except Exception as exc:
-            print(
-                f"Could not seed the auto-refresh browser profile: {exc}",
-                file=sys.stderr,
-            )
-            print(
-                "The server still works; sessions just need a manual re-auth when they expire."
-            )
-    else:
-        print(
-            "Optional: install with the [autorefresh] extra and run auth again to "
-            "enable automatic session refresh via a headless browser."
-        )
+    print("The session lasts about 30 days; re-run 'myfitnesspal-mcp auth' when it expires.")
     return 0
