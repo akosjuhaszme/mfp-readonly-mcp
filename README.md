@@ -67,6 +67,33 @@ Files stay on this machine: the cookie in the user config directory
 (`MFP_MCP_DATA_DIR`, same place by default). Network traffic goes only to
 `www.myfitnesspal.com` / `api.myfitnesspal.com`.
 
+## Using it together with a Garmin coach
+
+This server pairs with [garmin-firefighter-coach](https://github.com/akosjuhaszme/garmin-firefighter-coach)
+(the Garmin Connect MCP server of the same author's coaching setup). Register both in
+your MCP client's config and the assistant sees training and food side by side:
+
+```json
+{
+  "mcpServers": {
+    "garmin-workouts": { "command": "C:\path\to\garmin-workouts-mcp\.venv\Scripts\garmin-workouts-mcp.exe", "args": [] },
+    "mfp-readonly":    { "command": "C:\path\to\mfp-readonly-mcp\.venv\Scripts\myfitnesspal-mcp.exe", "args": [] }
+  }
+}
+```
+
+With MyFitnessPal and Garmin Connect linked to each other, data flows both ways
+(checked on a real account):
+
+- **MyFitnessPal -> Garmin:** calories eaten show up in Garmin's daily summary
+  (`consumed_kcal`), and a weight logged in MyFitnessPal appears in Garmin tagged
+  with the source `MFP`.
+- **Garmin -> MyFitnessPal:** synced workouts appear in MyFitnessPal's exercise diary
+  (plus a "Garmin Connect calorie adjustment" entry) and, with "Exercise Calories" on,
+  raise that day's calorie goal.
+- The assistant reads meals and macros through this server and everything else
+  (training, sleep, HRV, weight, hydration) through the Garmin server.
+
 ## Development
 
 ```
