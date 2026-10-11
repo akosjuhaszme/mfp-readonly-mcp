@@ -67,6 +67,21 @@ Files stay on this machine: the cookie in the user config directory
 (`MFP_MCP_DATA_DIR`, same place by default). Network traffic goes only to
 `www.myfitnesspal.com` / `api.myfitnesspal.com`.
 
+## Known behaviours (verified on a real account)
+
+- **Profile lookup can return HTTP 500** for accounts that log in with an e-mail address.
+  `auth` then asks for your MyFitnessPal *username* (not the e-mail) and stores it.
+- **Anonymous access does not work.** A Public or "Locked with a key" diary answers
+  scripts with a bot-protection challenge (HTTP 403); only the logged-in session cookie
+  gets through. Keep the diary Private.
+- **The day's goals are the adjusted budget:** with "Exercise Calories" on, calories
+  burned in synced exercise are added to the base goal, and the macro goals scale with it.
+- **The first call fills a local cache** with the last `MFP_SYNC_DAYS` days (default 30).
+  Use a small value (for example 2) for the first run. The cache (`data.db` in the data
+  directory) can be deleted at any time; it is refetched.
+- **The `.bat` file needs CRLF line endings** (kept by `.gitattributes`), otherwise `cmd`
+  garbles the Hungarian text.
+
 ## Using it together with a Garmin coach
 
 This server pairs with [garmin-firefighter-coach](https://github.com/akosjuhaszme/garmin-firefighter-coach)

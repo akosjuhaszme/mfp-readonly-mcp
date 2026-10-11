@@ -17,7 +17,12 @@ mcp = FastMCP(
     instructions=(
         "Read-only access to the user's MyFitnessPal food diary. Nothing here can "
         "log, change or delete diary data. The numbers are the user's own "
-        "record-keeping for trend analysis, not medical or dietary advice."
+        "record-keeping for trend analysis, not medical or dietary advice. If a "
+        "companion 'garmin-workouts' server is also connected, it holds the same "
+        "user's training, sleep, HRV, weight and hydration data from Garmin Connect; "
+        "workouts recorded there reach this diary's exercise log, and calories eaten "
+        "here reach Garmin's daily summary as consumed_kcal. Combine both for "
+        "questions about training, food and weight."
     ),
 )
 
