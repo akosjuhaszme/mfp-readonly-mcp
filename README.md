@@ -1,15 +1,19 @@
 # mfp-readonly-mcp
 
-A **read-only** local fork of [Mason-Levyy/myfitnesspal-mcp](https://github.com/Mason-Levyy/myfitnesspal-mcp)
-(`mfp-mcp` 0.4.1, upstream commit `1bb92c63cb291d57fd3ce7733b207a841d4ec13c`, MIT).
-It lets an MCP client (the Garmin coach session) *read* the MyFitnessPal food
-diary - meals, calories, macros, exercise, notes, trends - and nothing else.
-This copy is for personal use and is not published.
+A **read-only** fork of [Mason-Levyy/myfitnesspal-mcp](https://github.com/Mason-Levyy/myfitnesspal-mcp)
+(`mfp-mcp` 0.4.1, upstream commit `1bb92c63cb291d57fd3ce7733b207a841d4ec13c`, MIT, all credit
+for the original work to its author). It lets an MCP client (for example a Claude
+coaching or analysis session) *read* your MyFitnessPal food diary - meals, calories,
+macros, exercise, notes, trends - and nothing else: nothing here can log, change or
+delete diary data. The upstream server exposes 7 write/delete tools with no read-only
+switch, which is why this variant exists.
 
-MyFitnessPal's official partner API (OAuth, documented at myfitnesspalapi.com) is
-not accepting new access requests, so this reverse-engineers the website with a
-session cookie. It is unofficial and can break whenever MyFitnessPal changes the
-site.
+> **Unofficial, use at your own risk.** This project is not affiliated with or endorsed
+> by MyFitnessPal (Under Armour) or by the upstream author. MyFitnessPal's official
+> partner API is not accepting new access requests, so this reads the website with
+> your own logged-in session cookie. That can stop working whenever the site changes,
+> and automated access may be against MyFitnessPal's terms of service - check them
+> before using this. The cookie gives full access to your account: keep it secret.
 
 ## What was changed from upstream
 
@@ -39,11 +43,12 @@ Water is read from MyFitnessPal's own tracker.
 
 ## Connect or renew your account (you do this, not the assistant)
 
-**Easiest:** double-click the *MyFitnessPal megujitas* shortcut on the Desktop
-(`renew-mfp-session.bat`). It opens MyFitnessPal, walks through copying the cookie,
-asks for it at a hidden prompt and checks the result. Nothing needs restarting
-afterwards. From the 25th day on, every tool result carries a `session_notice`
-asking the user to renew.
+**Easiest (Windows):** double-click `renew-mfp-session.bat` (create a Desktop shortcut
+named *MyFitnessPal megujitas* to it; the tool's expiry notices refer to that name).
+It opens MyFitnessPal, walks you through copying the cookie (the on-screen text is in
+Hungarian), asks for it at a hidden prompt and checks the result. Nothing needs
+restarting afterwards. From the 25th day on, every tool result carries a
+`session_notice` asking the user to renew.
 
 **Manually:**
 
