@@ -108,6 +108,8 @@ With MyFitnessPal and Garmin Connect linked to each other, data flows both ways
   raise that day's calorie goal.
 - The assistant reads meals and macros through this server and everything else
   (training, sleep, HRV, weight, hydration) through the Garmin server.
+- Ready-made prompts that use both servers (first-run setup, weekly review, nutrition check)
+  are in the Garmin repository: [docs/PROMPTS.md](https://github.com/akosjuhaszme/garmin-firefighter-coach/blob/main/docs/PROMPTS.md).
 
 ## Development
 
