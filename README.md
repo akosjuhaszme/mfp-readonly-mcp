@@ -103,6 +103,9 @@ With MyFitnessPal and Garmin Connect linked to each other, data flows both ways
 - **MyFitnessPal -> Garmin:** calories eaten show up in Garmin's daily summary
   (`consumed_kcal`), and a weight logged in MyFitnessPal appears in Garmin tagged
   with the source `MFP`.
+  **Water is not synced:** water logged in MyFitnessPal (`water_ml` here) does not reach
+  Garmin's hydration tracker (checked live). Garmin's calorie goal (`net_goal_kcal`)
+  follows the MyFitnessPal goal.
 - **Garmin -> MyFitnessPal:** synced workouts appear in MyFitnessPal's exercise diary
   (plus a "Garmin Connect calorie adjustment" entry) and, with "Exercise Calories" on,
   raise that day's calorie goal.
