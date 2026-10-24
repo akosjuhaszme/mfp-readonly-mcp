@@ -14,9 +14,9 @@ echo.
 echo  A sütit ne másold be sehova máshova (chat, fájl): teljes fiókhozzáférést ad.
 echo.
 if not defined MFP_NO_BROWSER start "" "https://www.myfitnesspal.com/"
-"%~dp0.venv\Scripts\myfitnesspal-mcp.exe" auth
+"%~dp0.venv\Scripts\python.exe" -m myfitnesspal_mcp.cli auth
 echo.
-"%~dp0.venv\Scripts\myfitnesspal-mcp.exe" auth --check
+"%~dp0.venv\Scripts\python.exe" -m myfitnesspal_mcp.cli auth --check
 echo.
 echo  Ha fent "Status: valid" szerepel, kész - újraindítani semmit nem kell.
 echo.
