@@ -114,6 +114,12 @@ With MyFitnessPal and Garmin Connect linked to each other, data flows both ways
 - Ready-made prompts that use both servers (first-run setup, weekly review, nutrition check)
   are in the Garmin repository: [docs/PROMPTS.md](https://github.com/akosjuhaszme/garmin-firefighter-coach/blob/main/docs/PROMPTS.md).
 
+## Lessons learned (October 2026)
+
+- **(both) The Garmin link copies weigh-ins to MyFitnessPal within seconds.** A test weigh-in written to Garmin for a weight that differed from the day's weight reached MyFitnessPal at once, and an entry with the source MFP came back into Garmin (dated at the test moment, the newest of the day) even though the Garmin test entry had been deleted. This server cannot write, so the copy in MyFitnessPal has to be removed by hand in the app. While the link is on, never test a weigh-in with a value that differs from the real one.
+- **(MFP) Windows Smart App Control can block the unsigned `myfitnesspal-mcp.exe` launcher.** Start the server as `python.exe -m myfitnesspal_mcp.cli` (the signed interpreter is allowed); `renew-mfp-session.bat` calls the module the same way.
+- **(MFP) An expired session shows up as "MyFitnessPal session expired or not connected"** and is renewed with the shortcut or `auth`; nothing needs a restart afterwards.
+
 ## Development
 
 ```
