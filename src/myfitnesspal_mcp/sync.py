@@ -56,6 +56,8 @@ def macros(totals: dict) -> dict:
         "fat": first_number(totals, "fat"),
         "sodium": first_number(totals, "sodium"),
         "sugar": first_number(totals, "sugar"),
+        "fiber": first_number(totals, "fiber", "fibre"),
+        "sat_fat": first_number(totals, "sat fat", "saturated fat", "sat_fat"),
     }
 
 
@@ -73,6 +75,8 @@ def refresh_day(store: Store, client, day: date) -> None:
         goal_fat=first_number(mfp_day.goals or {}, "fat"),
         goal_sodium=first_number(mfp_day.goals or {}, "sodium"),
         goal_sugar=first_number(mfp_day.goals or {}, "sugar"),
+        goal_fiber=first_number(mfp_day.goals or {}, "fiber", "fibre"),
+        goal_sat_fat=first_number(mfp_day.goals or {}, "sat fat", "saturated fat", "sat_fat"),
     )
 
     store.replace_diary(

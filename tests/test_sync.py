@@ -114,9 +114,36 @@ def test_refresh_day_populates_store(store):
             "fat": None,
             "sodium": None,
             "sugar": None,
+            "fiber": None,
+            "sat_fat": None,
         }
     ]
     assert store.note(TODAY.isoformat()) == "today felt great"
+
+
+def test_fiber_and_saturated_fat_pass_through_when_the_diary_tracks_them(store):
+    """MyFitnessPal names the columns "fiber" and "sat fat"; the diary settings decide which nutrients exist at all."""
+    assert sync.macros({"calories": 870, "sat fat": 2, "fiber": 11})["fiber"] == 11.0
+    assert sync.macros({"calories": 870, "saturated fat": 2})["sat_fat"] == 2.0
+    assert sync.macros({"calories": 870})["fiber"] is None  # a column the user does not track stays empty
+
+    class DayWithExtras(FakeDay):
+        def __init__(self):
+            super().__init__()
+            self.totals = {**self.totals, "sat fat": 12, "fiber": 31}
+            self.goals = {"calories": 2200, "sat fat": 30, "fiber": 38}
+            self.meals = [FakeMeal("breakfast", [FakeEntry("Oats", {"calories": 300, "sat fat": 1, "fiber": 8})])]
+
+    class ExtrasClient(FakeSyncClient):
+        def get_date(self, day):
+            return DayWithExtras()
+
+    sync.refresh_day(store, ExtrasClient(), TODAY)
+    nutrition = store.nutrition(TODAY.isoformat())
+    assert (nutrition["fiber"], nutrition["sat_fat"], nutrition["goal_fiber"], nutrition["goal_sat_fat"]) == (31.0, 12.0, 38.0, 30.0)
+    entry = store.diary(TODAY.isoformat())[0]
+    assert (entry["fiber"], entry["sat_fat"]) == (8.0, 1.0)
+    assert store.trend("fiber", "2026-07-01", "2026-07-31") == [{"day": TODAY.isoformat(), "value": 31.0}]
 
 
 def test_poll_skips_when_synced_today(store, monkeypatch):

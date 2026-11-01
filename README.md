@@ -79,6 +79,7 @@ Files stay on this machine: the cookie in the user config directory
 - **The first call fills a local cache** with the last `MFP_SYNC_DAYS` days (default 30).
   Use a small value (for example 2) for the first run. The cache (`data.db` in the data
   directory) can be deleted at any time; it is refetched.
+- **Which nutrients come through depends on the diary settings.** MyFitnessPal shows five nutrient columns in the diary (Settings, Diary Settings, Nutrients Tracked: carbohydrates, fat, protein and two more of sodium, sugar, saturated fat, fibre, cholesterol, potassium, vitamins, calcium, iron) and the reader sees only what is shown. It passes calories, protein, carbs, fat, sodium, sugar, **fibre (`fiber`) and saturated fat (`sat_fat`)** with their daily goals, per day and per entry; a nutrient that is not among the five columns stays empty. Checked live on a Premium account by swapping sodium and sugar for saturated fat and fibre (the reader returned both, including the goals 30 g and 38 g, per entry and per day) and swapping them back. After an upgrade the cache gets the new columns and refetches its days. Other nutrients (cholesterol, potassium, vitamins) are not carried yet.
 - **The `.bat` file needs CRLF line endings** (kept by `.gitattributes`), otherwise `cmd`
   garbles the Hungarian text.
 
